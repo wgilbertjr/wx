@@ -1,38 +1,39 @@
 import json
+import os.path
+import re
 import requests
 import sys
+import wx_mods
+from  icecream import ic
+
+
 
 # https://api.weatherapi.com/v1/astronomy.json?key=03b8e7b5c6e74f02bfe115319242408&q=21742
 # https://api.weatherapi.com/v1/current.json?key=03b8e7b5c6e74f02bfe115319242408&q=21742
 #
 # To Do:
-# add command parameters to command
 # error checking for api calls
-# config file or commandline arguments?
 # logging for errors, etc
 
 def main():
-    # move these to config file.
-    wx_token = '03b8e7b5c6e74f02bfe115319242408'
+    ic.disable()
     wx_base_url = 'https://api.weatherapi.com/v1/'
     wx_astro_api = 'astronomy.json'
     wx_current_api = 'current.json'
     
-    # check valid US zipcode.
     try:
-        location = sys.argv[1]
-    except IndexError:
-        location = '21742' # input('US Zipcode: ')
-        
-    try:
-        astro_data(wx_base_url, wx_astro_api, wx_token, location)
-        current_wx(wx_base_url, wx_current_api, wx_token, location)
-        
-    except:
-        print('What happened?')
-        
+        cfg_file = os.path.dirname(os.path.realpath(__file__)) + '/wx.config'
+        cfg = wx_mods.read_config(cfg_file)
+    except FileNotFoundError:
+        ic('File not found.', cfg_file)
+        sys.exit(1)
+    finally:
+        astro = astro_data(wx_base_url, wx_astro_api, cfg['wx_token'], cfg['zipcode'])
+        print(astro)
+        current = current_wx(wx_base_url, wx_current_api, cfg['wx_token'], cfg['zipcode'])
+        print(current)
+
 def get_wind(r_json):
-    
     wind_speed_mph = r_json['current']['wind_mph']
     wind_speed_kph = r_json['current']['wind_kph']
     wind_direction = r_json['current']['wind_dir']
@@ -43,25 +44,29 @@ def get_wind(r_json):
     
 def current_wx(wx_base_url, wx_current_api, wx_token, location):
     url = wx_base_url + wx_current_api + '?key=' + wx_token
-    parameters = {'q': location}
+    parameters = {'q': str(location)}
     
-    r_json = getWxJson(url, parameters)
-    #return r_json
-    print(f'Current Conditions: {r_json['current']['condition']['text']}')
-    print(f'Temperature: {r_json['current']['temp_f']} {u'\N{DEGREE SIGN}'}F ({r_json['current']['temp_c']} {u'\N{DEGREE SIGN}'}C)')
-    print(f'Barometer: {r_json['current']['pressure_in']}in ({r_json['current']['pressure_mb']} mb)')
+    r_json = wx_mods.getWxJson(url, parameters)
     
+    return {'current_conditions':r_json['current']['condition']['text'],
+           'temp_f':r_json['current']['temp_f'],
+           'temp_c':r_json['current']['temp_c'],
+           'pressure_in':r_json['current']['pressure_in'],
+           'pressure_mb':r_json['current']['pressure_mb']
+           }
     
 def astro_data(wx_base_url, wx_astro_api, wx_token, location):
     url = wx_base_url + wx_astro_api + '?key=' + wx_token
-    parameters = {'q': location}
+    parameters = {'q': str(location)}
     
-    r_json = getWxJson(url, parameters)
+    r_json = wx_mods.getWxJson(url, parameters)
     
-    print(f'Location: {r_json['location']['name']}, {r_json['location']['region']}')
-    print(f'Local Time: {r_json['location']['localtime']}')
-    print(f'Sunrise: {r_json['astronomy']['astro']['sunrise']}')
-    print(f'Sunset: {r_json['astronomy']['astro']['sunset']}')
+    return {'location':r_json['location']['name'], 
+              'region':r_json['location']['region'],
+              'l_time':r_json['location']['localtime'],
+              'sunrise':r_json['astronomy']['astro']['sunrise'],
+              'sunset':r_json['astronomy']['astro']['sunset']
+            }
     
 def getWxJson(url, parameters):
     # error checking on session
